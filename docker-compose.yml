@@ -1,0 +1,35 @@
+version: '2'
+services:
+  phpfpm_fa:
+    build:
+      context: ./php-fpm
+      dockerfile: Dockerfile-56
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./app:/app
+    links:
+      - mariadb_master
+    external_links:
+      - nginx:fa.dev
+  nginx:
+    image: bitnami/nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx-persistence:/bitnami/nginx
+      - ./app:/app
+    links:
+      - phpfpm_fa
+  mariadb_master:
+    image: bitnami/mariadb:latest
+    environment:
+      - MARIADB_ROOT_PASSWORD=dockertest
+      - MARIADB_USER=dockertest
+      - MARIADB_PASSWORD=dockertest
+      - MARIADB_DATABASE=dockertest
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mariadb-persistence:/bitnami/mariadb
+
