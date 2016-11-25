@@ -1,3 +1,10 @@
 .idea
 mariadb-persistence
 nginx-persistence
+config.php
+config_db.php
+installed_extensions.php
+app/fa/company
+errors.log
+installed_languages.inc
+faillog.php
