@@ -18,9 +18,9 @@ include_once($path_to_root . "/sales/includes/sales_ui.inc");
 include_once($path_to_root . "/sales/includes/sales_db.inc");
 
 $js = "";
-if ($use_popup_windows)
+if ($SysPrefs->use_popup_windows)
 	$js .= get_js_open_window(900, 500);
-if ($use_date_picker)
+if (user_use_date_picker())
 	$js .= get_js_date_picker();
 page(_($help_context = "Customer Allocation Inquiry"), false, false, "", $js);
 
@@ -41,7 +41,7 @@ start_row();
 
 customer_list_cells(_("Select a customer: "), 'customer_id', $_POST['customer_id'], true);
 
-date_cells(_("from:"), 'TransAfterDate', '', null, -30);
+date_cells(_("from:"), 'TransAfterDate', '', null, -user_transaction_days());
 date_cells(_("to:"), 'TransToDate', '', null, 1);
 
 cust_allocations_list_cells(_("Type:"), 'filterType', null);
@@ -82,12 +82,12 @@ function view_link($trans)
 
 function due_date($row)
 {
-	return $row["type"] == 10 ? $row["due_date"] : '';
+	return $row["type"] == ST_SALESINVOICE ? $row["due_date"] : '';
 }
 
 function fmt_balance($row)
 {
-	return $row["TotalAmount"] - $row["Allocated"];
+	return ($row["type"] == ST_JOURNAL && $row["TotalAmount"] < 0 ? -$row["TotalAmount"] : $row["TotalAmount"]) - $row["Allocated"];
 }
 
 function alloc_link($row)
@@ -101,8 +101,10 @@ function alloc_link($row)
 	{
 		/*its a credit note which could have an allocation */
 		return $link;
-	}
-	elseif (($row["type"] == ST_CUSTPAYMENT || $row["type"] == ST_BANKDEPOSIT) &&
+	} elseif ($row["type"] == ST_JOURNAL && $row['TotalAmount'] < 0)
+	{
+		return $link;
+	} elseif (($row["type"] == ST_CUSTPAYMENT || $row["type"] == ST_BANKDEPOSIT) &&
 		(floatcmp($row['TotalAmount'], $row['Allocated']) >= 0))
 	{
 		/*its a receipt  which could have an allocation*/
@@ -112,7 +114,7 @@ function alloc_link($row)
 	{
 		/*its a negative receipt */
 		return '';
-	} elseif ($row["type"] == ST_SALESINVOICE && ($row['TotalAmount'] - $row['Allocated']) > 0)
+	} elseif (($row["type"] == ST_SALESINVOICE && ($row['TotalAmount'] - $row['Allocated']) > 0) || $row["type"] == ST_BANKPAYMENT)
 		return pager_link(_("Payment"),
 			"/sales/customer_payments.php?customer_id=".$row["debtor_no"]."&SInvoice=" . $row["trans_no"], ICON_MONEY);
 
@@ -142,9 +144,9 @@ $sql = get_sql_for_customer_allocation_inquiry(get_post('TransAfterDate'), get_p
 //------------------------------------------------------------------------------------------------
 $cols = array(
 	_("Type") => array('fun'=>'systype_name'),
-	_("#") => array('fun'=>'view_link'),
+	_("#") => array('fun'=>'view_link', 'align'=>'right'),
 	_("Reference"), 
-	_("Order") => array('fun'=>'order_link', 'ord'=>''), 
+	_("Order") => array('fun'=>'order_link', 'ord'=>'', 'align'=>'right'), 
 	_("Date") => array('name'=>'tran_date', 'type'=>'date', 'ord'=>'asc'),
 	_("Due Date") => array('type'=>'date', 'fun'=>'due_date'),
 	_("Customer") => array('name' =>'name',  'ord'=>'asc'), 
@@ -170,4 +172,3 @@ display_db_pager($table);
 
 end_form();
 end_page();
-?>

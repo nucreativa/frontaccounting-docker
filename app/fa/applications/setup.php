@@ -11,9 +11,9 @@
 ***********************************************************************/
 class setup_app extends application
 {
-	function setup_app()
+	function __construct()
 	{
-		$this->application("system", _($this->help_context = "S&etup"));
+		parent::__construct("system", _($this->help_context = "S&etup"));
 
 		$this->add_module(_("Company Setup"));
 		$this->add_lapp_function(0, _("&Company Setup"),
@@ -24,7 +24,7 @@ class setup_app extends application
 			"admin/security_roles.php?", 'SA_SECROLES', MENU_SETTINGS);
 		$this->add_lapp_function(0, _("&Display Setup"),
 			"admin/display_prefs.php?", 'SA_SETUPDISPLAY', MENU_SETTINGS);
-		$this->add_lapp_function(0, _("&Forms Setup"),
+		$this->add_lapp_function(0, _("Transaction &References"),
 			"admin/forms_setup.php?", 'SA_FORMSETUP', MENU_SETTINGS);
 		$this->add_rapp_function(0, _("&Taxes"),
 			"taxes/tax_types.php?", 'SA_TAXRATES', MENU_MAINTENANCE);
@@ -81,4 +81,3 @@ class setup_app extends application
 }
 
 
-?>

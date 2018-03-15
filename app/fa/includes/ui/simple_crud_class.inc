@@ -26,7 +26,7 @@ class simple_crud {
 	var $dec;
 	//
 	//
-	function simple_crud($name, $fields = null)
+	function __construct($name, $fields = null)
 	{
 		$this->name = $name;
 		$this->pre_handlers = array(
@@ -105,8 +105,6 @@ class simple_crud {
 	function _check_mode()
 	{
 		global $Ajax;
-
-		$sel_name = $this->name.'_id';
 
 		// list controls lookup
 		foreach (array_keys($this->pre_handlers) as $m) {
@@ -211,9 +209,9 @@ class simple_crud {
 		if ($async === 'both') {
 			$async = 'default'; $cancel = 'cancel';
 		} 
-		else if ($async === 'default')
+		elseif ($async === 'default')
 			$cancel = true;
-		else if ($async === 'cancel')
+		elseif ($async === 'cancel')
 			$async = true;
 		echo "<center>";
 
@@ -376,4 +374,3 @@ class simple_crud {
 	}
 };
 
-?>

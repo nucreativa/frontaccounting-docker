@@ -50,39 +50,45 @@ function write_supp_trans($type, $trans_no, $supplier_id, $date_, $due_date, $re
 
 //-------------------------------------------------------------------------------------------------------------
 
-function get_supp_trans($trans_no, $trans_type=-1)
+function get_supp_trans($trans_no, $trans_type=-1, $supplier_id=null)
 {
-	$sql = "SELECT ".TB_PREF."supp_trans.*, (".TB_PREF."supp_trans.ov_amount+".TB_PREF."supp_trans.ov_gst+".TB_PREF."supp_trans.ov_discount) AS Total,
-		".TB_PREF."suppliers.supp_name AS supplier_name, ".TB_PREF."suppliers.curr_code AS curr_code ";
+	$sql = "SELECT trans.*, (trans.ov_amount+trans.ov_gst+trans.ov_discount) AS Total,
+		supplier.supp_name AS supplier_name, supplier.curr_code AS curr_code ";
 
 	if ($trans_type == ST_SUPPAYMENT || $trans_type == ST_BANKPAYMENT)
 	{
 		// it's a payment so also get the bank account
-		$sql .= ", ".TB_PREF."bank_accounts.bank_name, ".TB_PREF."bank_accounts.bank_account_name, ".TB_PREF."bank_accounts.bank_curr_code,
-			".TB_PREF."bank_accounts.account_type AS BankTransType, ".TB_PREF."bank_trans.amount AS bank_amount,
-			".TB_PREF."bank_trans.ref ";
+		$sql .= ", account.bank_name, account.bank_account_name, account.bank_curr_code,
+			account.account_type AS BankTransType, bank_trans.amount AS bank_amount,
+			bank_trans.ref ";
 	}
 
-	$sql .= " FROM ".TB_PREF."supp_trans, ".TB_PREF."suppliers ";
+	$sql .= " FROM ".TB_PREF."supp_trans trans,"
+			.TB_PREF."suppliers supplier";
 
 	if ($trans_type == ST_SUPPAYMENT || $trans_type == ST_BANKPAYMENT)
 	{
 		// it's a payment so also get the bank account
-		$sql .= ", ".TB_PREF."bank_trans, ".TB_PREF."bank_accounts";
+		$sql .= ", "
+			.TB_PREF."bank_trans bank_trans,"
+			.TB_PREF."bank_accounts account";
 	}
 
-	$sql .= " WHERE ".TB_PREF."supp_trans.trans_no=".db_escape($trans_no)."
-		AND ".TB_PREF."supp_trans.supplier_id=".TB_PREF."suppliers.supplier_id";
+	$sql .= " WHERE trans.trans_no=".db_escape($trans_no)."
+		AND trans.supplier_id=supplier.supplier_id";
 
-	if ($trans_type > 0)
-		$sql .= " AND ".TB_PREF."supp_trans.type=".db_escape($trans_type);
+	if (isset($supplier_id))
+		$sql .= " AND trans.supplier_id=".db_escape($supplier_id);
+
+	if ($trans_type > -1)
+		$sql .= " AND trans.type=".db_escape($trans_type);
 
 	if ($trans_type == ST_SUPPAYMENT || $trans_type == ST_BANKPAYMENT)
 	{
 		// it's a payment so also get the bank account
-		$sql .= " AND ".TB_PREF."bank_trans.trans_no =".db_escape($trans_no)."
-			AND ".TB_PREF."bank_trans.type=".db_escape($trans_type)."
-			AND ".TB_PREF."bank_accounts.id=".TB_PREF."bank_trans.bank_act ";
+		$sql .= " AND bank_trans.trans_no =".db_escape($trans_no)."
+			AND bank_trans.type=".db_escape($trans_type)."
+			AND account.id=bank_trans.bank_act ";
 	}
 
 	$result = db_query($sql, "Cannot retreive a supplier transaction");
@@ -100,8 +106,50 @@ function get_supp_trans($trans_no, $trans_type=-1)
        display_db_error("duplicate supplier transactions found for given params", $sql, true);
        exit;
     }
-
     return db_fetch($result);
+}
+
+
+//----------------------------------------------------------------------------------------
+
+function get_supp_payment_before($supplier_id, $date)
+{
+	$sql = "SELECT "
+	. TB_PREF . "supp_trans.trans_no,"
+	. TB_PREF . "supp_trans.type,"
+	. TB_PREF . "supp_trans.supplier_id,"
+	. TB_PREF . "supp_trans.tran_date,"
+	. TB_PREF . "supp_trans.ov_amount,"
+	. TB_PREF . "bank_trans.ref AS bank_ref,"
+	. TB_PREF . "bank_trans.amount AS bank_amount,"
+	. TB_PREF . "bank_accounts.id AS bank_id,"
+	. TB_PREF . "bank_accounts.bank_name,"
+	. TB_PREF . "bank_accounts.bank_account_name,"
+	. TB_PREF . "bank_accounts.bank_curr_code "
+	. "FROM "
+	. TB_PREF . "supp_trans,"
+	. TB_PREF . "bank_trans,"
+	. TB_PREF . "bank_accounts "
+	. "WHERE "
+	. TB_PREF . "supp_trans.supplier_id=" . $supplier_id . " "
+	. "AND " . TB_PREF . "supp_trans.tran_date<'" . $date . "' "
+	. "AND " . TB_PREF . "supp_trans.type=" . ST_SUPPAYMENT . " "
+	. "AND " . TB_PREF . "supp_trans.trans_no=" . TB_PREF . "bank_trans.trans_no "
+	. "AND " . TB_PREF . "supp_trans.type=" . TB_PREF . "bank_trans.type "
+	. "AND " . TB_PREF . "bank_accounts.id=" . TB_PREF . "bank_trans.bank_act "
+	. "ORDER BY "
+	. TB_PREF . "supp_trans.tran_date DESC "
+	. "LIMIT 1 "
+	;
+
+	$result = db_query($sql, "Cannot retreive a previous supplier payment");
+
+	if (db_num_rows($result) == 0)
+	{
+		return false;
+	}
+
+	return db_fetch($result);
 }
 
 //----------------------------------------------------------------------------------------
@@ -176,14 +224,16 @@ function get_sql_for_supplier_inquiry($filter, $after_date, $to_date, $supplier_
     	trans.tran_date, 
 		trans.due_date,
 		supplier.curr_code, 
-    	(trans.ov_amount + trans.ov_gst  + trans.ov_discount) AS TotalAmount, 
+    	(trans.ov_amount + trans.ov_gst  + trans.ov_discount) AS TotalAmount,
+
+    	IF (trans.type=".ST_SUPPINVOICE." OR trans.type=".ST_BANKDEPOSIT."
+  	OR (trans.type=".ST_JOURNAL." AND (trans.ov_amount + trans.ov_gst + trans.ov_discount)>0), 1, -1)*
+    		(ABS(trans.ov_amount + trans.ov_gst + trans.ov_discount) - trans.alloc) Balance,
 		trans.alloc AS Allocated,
 		((trans.type = ".ST_SUPPINVOICE." OR trans.type = ".ST_SUPPCREDIT.") AND trans.due_date < '" . date2sql(Today()) . "') AS OverDue,
     	(ABS(trans.ov_amount + trans.ov_gst  + trans.ov_discount) - trans.alloc <= ".FLOAT_COMP_DELTA.") AS Settled
     	FROM ".TB_PREF."supp_trans as trans, ".TB_PREF."suppliers as supplier
     	WHERE supplier.supplier_id = trans.supplier_id
-     	AND trans.tran_date >= '$date_after'
-    	AND trans.tran_date <= '$date_to'
 		AND trans.ov_amount != 0";	// exclude voided transactions
 
 	$sql2 = "SELECT ".ST_SUPPRECEIVE." as type, 
@@ -194,15 +244,21 @@ function get_sql_for_supplier_inquiry($filter, $after_date, $to_date, $supplier_
     	delivery_date as tran_date, 
 		'' as due_date,
 		supplier.curr_code, 
+		0 as Balance, 
     	'' AS TotalAmount,
 		'' AS Allocated,
 		0 as OverDue,
     	1 as Settled
     	FROM ".TB_PREF."grn_batch as trans, ".TB_PREF."suppliers as supplier, ".TB_PREF."purch_orders as po
     	WHERE supplier.supplier_id = trans.supplier_id
-    	AND trans.purch_order_no = po.order_no
-     	AND trans.delivery_date >= '$date_after'
-    	AND trans.delivery_date <= '$date_to'";
+    	AND trans.purch_order_no = po.order_no";
+
+	if ($filter == '2')
+		$sql .= " AND ABS(trans.ov_amount + trans.ov_gst + trans.ov_discount) - trans.alloc>".FLOAT_COMP_DELTA;
+	else {
+		$sql .= " AND trans.tran_date >= '$date_after'
+			AND trans.tran_date <= '$date_to'";
+	}
 
    	if ($supplier_id != ALL_TEXT) {
    		$sql .= " AND trans.supplier_id = ".db_escape($supplier_id);
@@ -212,8 +268,8 @@ function get_sql_for_supplier_inquiry($filter, $after_date, $to_date, $supplier_
 	{
 			$sql = $sql2;
 	} 
-	elseif (!isset($filter) || $filter == ALL_TEXT || $filter == '6') {
-		$sql = "SELECT * FROM (($sql) UNION ($sql2)) as tr";
+	elseif (!isset($filter) || $filter == ALL_TEXT) {
+		$sql = "SELECT * FROM (($sql) UNION ($sql2)) as tr WHERE 1";
    	}
 
    	if (isset($filter) && $filter != ALL_TEXT)
@@ -221,10 +277,6 @@ function get_sql_for_supplier_inquiry($filter, $after_date, $to_date, $supplier_
    		if (($filter == '1')) 
    		{
    			$sql .= " AND (trans.type = ".ST_SUPPINVOICE." OR trans.type = ".ST_BANKDEPOSIT.")";
-   		} 
-   		elseif (($filter == '2')) 
-   		{
-   			$sql .= " AND trans.type = ".ST_SUPPINVOICE." ";
    		} 
    		elseif ($filter == '3') 
    		{
@@ -243,4 +295,3 @@ function get_sql_for_supplier_inquiry($filter, $after_date, $to_date, $supplier_
    	}
    	return $sql;
 }
-?>

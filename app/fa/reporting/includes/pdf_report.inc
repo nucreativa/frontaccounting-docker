@@ -20,6 +20,7 @@
 */
 include_once(dirname(__FILE__)."/class.pdf.inc");
 include_once(dirname(__FILE__)."/printer_class.inc");
+include_once($path_to_root . "/reporting/includes/reporting.inc");
 include_once($path_to_root . "/admin/db/company_db.inc");
 include_once($path_to_root . "/admin/db/fiscalyears_db.inc");
 include_once($path_to_root . "/admin/db/printers_db.inc");
@@ -69,7 +70,7 @@ class FrontReport extends Cpdf
 	
 	var $dest;	// destination: email or printer
 	
-	function FrontReport($title, $filename, $size = 'A4', $fontsize = 9, $orientation = 'P', $margins = NULL, $excelColWidthFactor = NULL)
+	function __construct($title, $filename, $size = 'A4', $fontsize = 9, $orientation = 'P', $margins = NULL, $excelColWidthFactor = NULL)
 	{
 		global $page_security;
 
@@ -221,7 +222,7 @@ class FrontReport extends Cpdf
 		$this->scaleLogoWidth = false; // if Logo, scale on width (else height).
 		$this->SetHeaderType('Header'); // default
 
-		$this->Cpdf($size, $_SESSION['language']->code, $orientation);
+		parent::__construct($size, $_SESSION['language']->code, $orientation);
 	}
 	
 	/*
@@ -253,12 +254,12 @@ class FrontReport extends Cpdf
 		$cols2 = null, $headers2 = null, $aligns2 = null,
 		$companylogoenable = false, $footerenable = false, $footertext = '')
 	{
-		global $app_title, $version, $power_by, $power_url;
+		global $SysPrefs, $version;
 
 		$this->addInfo('Title', $this->title);
 		$this->addInfo('Subject', $this->title);
-		$this->addInfo('Author', $app_title . ' ' . $version);
-		$this->addInfo('Creator',$power_by . ' - ' . $power_url);
+		$this->addInfo('Author', $SysPrefs->app_title . ' ' . $version);
+		$this->addInfo('Creator',$SysPrefs->power_by . ' - ' . $SysPrefs->power_url);
 		$year = get_current_fiscalyear();
 		if ($year['closed'] == 0)
 			$how = _("Active");
@@ -295,6 +296,8 @@ class FrontReport extends Cpdf
 	//
 	function Header()
 	{
+		global $SysPrefs;
+		
 		$companyCol = $this->endLine - 150;
 		$titleCol = $this->leftMargin + 100;
 
@@ -310,9 +313,18 @@ class FrontReport extends Cpdf
 		$this->Text($this->leftMargin, $this->title, $companyCol);
 		$this->Font();
 		$this->fontSize -= 4;
-		$this->Text($companyCol, $this->company['coy_name']);
-		$this->row -= ($this->lineHeight + 4);
-
+		$logo = company_path() . "/images/" . $this->company['coy_logo'];
+		if (!empty($SysPrefs->prefs['company_logo_report']) && $this->company['coy_logo'] != '' && file_exists($logo))
+		{
+			$this->row -= ($this->lineHeight + 3);
+			$this->AddImage($logo, $companyCol, $this->row, 0, 30);
+			$this->row -= 6;
+		}
+		else
+		{
+			$this->Text($companyCol, $this->company['coy_name']);
+			$this->row -= ($this->lineHeight + 4);
+		}
 		$str = _("Print Out Date") . ':';
 		$this->Text($this->leftMargin, $str, $titleCol);
 		$str = Today() . '   ' . Now();
@@ -375,8 +387,6 @@ class FrontReport extends Cpdf
 	*/
 	function SetCommonData($myrow, $branch, $sales_order, $bankaccount, $doctype, $contacts)
 	{
-//		$this->formData = array_merge($myrow, $branch, $sales_order, 
-//			$bank_account, array('doctype' => $doctype));
 
 		$this->formData = array();
 		$datnames = array( 
@@ -386,7 +396,7 @@ class FrontReport extends Cpdf
 			'DebtorName', 'supp_account_no', 'wo_ref', 'debtor_ref','type', 'trans_no', 
 			'StockItemName', 'tax_id', 'order_', 'delivery_date', 'units_issued',
 			'due_date', 'required_by', 'payment_terms', 'curr_code',
-			'ov_freight', 'ov_gst', 'ov_amount', 'requisition_no', 'contact'),
+			'ov_freight', 'ov_gst', 'ov_amount', 'prepaid', 'requisition_no', 'contact'),
 		'branch' => array('br_address', 'br_name', 'salesman', 'disable_branch'),
 		'sales_order' => array('deliver_to', 'delivery_address', 'customer_ref'),
 		'bankaccount' => array('bank_name', 'bank_account_number', 'payment_service')
@@ -423,14 +433,15 @@ class FrontReport extends Cpdf
 	*/
 	function Header2()
 	{
-		global $path_to_root, $print_as_quote,
-			$print_invoice_no, $packing_slip, $dflt_lang; // FIXME should be passed as params
+		global $dflt_lang; // FIXME should be passed as params
 
+		$this->SetLang(@$this->formData['rep_lang'] ? $this->formData['rep_lang'] : $dflt_lang);
 		$doctype = $this->formData['doctype'];
 		$header2type = true;
 
+		$lang = user_language();
 		$this->SetLang(@$this->formData['rep_lang'] ? $this->formData['rep_lang']
- 			: ($_SESSION["wa_current_user"]->prefs->language ? $_SESSION["wa_current_user"]->prefs->language : $dflt_lang));
+ 			: ( $lang ? $lang : $dflt_lang));
 
  		 // leave layout files names without path to enable including
  		 // modified versions from company/x/reporting directory
@@ -469,16 +480,6 @@ class FrontReport extends Cpdf
 		$footerCol = $this->leftMargin + PAGE_NUM_WIDTH; 
 		$footerRow = $this->bottomMargin - FOOTER_MARGIN;
 
-		// Calling this function generates a new PDF page after the first instance
-//		{
-//			// TODO: experimenting with line drawing to highlight current period
-//			$this->SetLineWidth(1);
-//			$this->LineTo($this->cols[3], 33, $this->cols[3], 534);
-//			$this->LineTo($this->cols[4], 33, $this->cols[4], 534);
-//			$this->SetLineWidth(0.1);
-			
-//			$this->newPage();
-//		}
 		$this->row = $this->pageHeight - $this->topMargin;
 
 		// Set the color of dividing lines we'll draw
@@ -947,12 +948,12 @@ class FrontReport extends Cpdf
 
 	function End($email=0, $subject='')
 	{
-		global $pdf_debug, $path_to_root;
+		global $SysPrefs, $path_to_root;
 
-		if ($pdf_debug == 1)
+		if ($SysPrefs->pdf_debug == 1)
 		{
 			$pdfcode = $this->Output('','S');
-			$pdfcode = str_replace("\n", "\n<br>", htmlspecialchars($pdfcode));
+			$pdfcode = str_replace("\n", "\n<br>", html_specials_encode($pdfcode));
 			echo '<html><body>';
 			echo trim($pdfcode);
 			echo '</body></html>';
@@ -967,10 +968,7 @@ class FrontReport extends Cpdf
 			}
 			// do not use standard filenames or your sensitive company data 
 			// are world readable
-			if ($email == 1)
-				$fname = $dir.'/'.$this->filename;
-			else	
-				$fname = $dir.'/'.uniqid('').'.pdf';
+			$fname = $dir.'/'.random_id().'.pdf';
 			$this->Output($fname, 'F');
 
 			if ($email == 1)
@@ -1024,7 +1022,7 @@ class FrontReport extends Cpdf
     					$mail->to($to); $try++;
     					$mail->subject($subject);
     					$mail->text($msg . $sender);
-    					$mail->attachment($fname);
+    					$mail->attachment($fname, $this->filename);
     					$emails .= " " . $contact['email'];
     					if ($mail->send()) $sent++;
 					} // foreach contact
@@ -1057,7 +1055,6 @@ class FrontReport extends Cpdf
 						header('Expires: 0');
 						header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
 						header('Pragma: public');
-//						$this->Stream(basename($fname));
 						$this->Stream($this->filename);
 					}
 				} else { // send report to network printer
@@ -1088,4 +1085,3 @@ class FrontReport extends Cpdf
 	}
 }
 
-?>

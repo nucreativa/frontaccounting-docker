@@ -19,12 +19,12 @@ define('MENU_UPDATE', 'menu_update');
 define('MENU_SETTINGS', 'menu_settings');
 define('MENU_SYSTEM', 'menu_system');
 
-        class menu_item
+    class menu_item
 	{
 		var $label;
 		var $link;
 		
-		function menu_item($label, $link) 
+		function __construct($label, $link) 
 		{
 			$this->label = $label;
 			$this->link = $link;
@@ -36,7 +36,7 @@ define('MENU_SYSTEM', 'menu_system');
 		var $title;
 		var $items;
 		
-		function menu($title) 
+		function __construct($title) 
 		{
 			$this->title = $title;
 			$this->items = array();
@@ -56,9 +56,9 @@ define('MENU_SYSTEM', 'menu_system');
 		var $label;
 		var $link;
 		var $access;
-                var $category;
+        var $category;
 		
-		function app_function($label,$link,$access='SA_OPEN',$category='')
+		function __construct($label,$link,$access='SA_OPEN',$category='')
 		{
 			$this->label = $label;
 			$this->link = $link;
@@ -74,7 +74,7 @@ define('MENU_SYSTEM', 'menu_system');
 		var $lappfunctions;
 		var $rappfunctions;
 		
-		function module($name,$icon = null) 
+		function __construct($name,$icon = null) 
 		{
 			$this->name = $name;
 			$this->icon = $icon;
@@ -85,7 +85,6 @@ define('MENU_SYSTEM', 'menu_system');
 		function add_lapp_function($label,$link="",$access='SA_OPEN',$category='')
 		{
 			$appfunction = new app_function($label,$link,$access,$category);
-			//array_push($this->lappfunctions,$appfunction);
 			$this->lappfunctions[] = $appfunction;
 			return $appfunction;
 		}
@@ -93,7 +92,6 @@ define('MENU_SYSTEM', 'menu_system');
 		function add_rapp_function($label,$link="",$access='SA_OPEN',$category='')
 		{
 			$appfunction = new app_function($label,$link,$access,$category);
-			//array_push($this->rappfunctions,$appfunction);
 			$this->rappfunctions[] = $appfunction;
 			return $appfunction;
 		}
@@ -109,7 +107,7 @@ define('MENU_SYSTEM', 'menu_system');
 		var $modules;
 		var $enabled;
 		
-		function application($id, $name, $enabled=true) 
+		function __construct($id, $name, $enabled=true) 
 		{
 			$this->id = $id;
 			$this->name = $name;
@@ -120,7 +118,6 @@ define('MENU_SYSTEM', 'menu_system');
 		function add_module($name, $icon = null) 
 		{
 			$module = new module($name,$icon);
-			//array_push($this->modules,$module);
 			$this->modules[] = $module;
 			return $module;
 		}
@@ -144,17 +141,8 @@ define('MENU_SYSTEM', 'menu_system');
 		//
 		function report_class_url($class)
 		{
-			global $installed_extensions;
-
-			// TODO : konwencja lub ?
-			$classno = 7;
-//			if (file_exists($path_to_root.'/'.$mod['path'].'/'.$entry['url']
-//					.'/'.'reporting/reports_custom.php'))
-				return "reporting/reports_main.php?Class=".$class;
-//			else
-//				return '';
+			return "reporting/reports_main.php?Class=".$class;
 		}
 	}
 
 
-?>

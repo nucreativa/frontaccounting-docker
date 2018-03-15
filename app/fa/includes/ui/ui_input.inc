@@ -37,6 +37,14 @@ function find_submit($prefix, $numeric=true)
     }
     return $numeric ? -1 : null;
 }
+/*
+	Helper function.
+	Returns true if input $name with $submit_on_change option set is subject to update.
+*/
+function input_changed($name)
+{
+	return isset($_POST['_'.$name.'_changed']);
+}
 
 //------------------------------------------------------------------------------
 //
@@ -120,6 +128,7 @@ function hidden($name, $value=null, $echo=true)
 		'cancel'  - cancel form entry on Escape press; dflt ICON_CANCEL
 		'process' - displays progress bar during call; optional icon
 		'nonajax' - ditto, non-ajax submit
+
 	$atype can contain also multiply type selectors separated by space, 
 	however make sense only combination of 'process' and one of defualt/selector/cancel
 */
@@ -150,6 +159,7 @@ function submit($name, $value, $echo=true, $title=false, $atype=false, $icon=fal
 					if ($icon===false) $icon=ICON_ESCAPE; break;
 
 				case 'nonajax':
+				case 'download':
 					$atype = false;
 			}
 		}
@@ -193,6 +203,7 @@ function submit_center_last($name, $value, $title=false, $async=false, $icon=fal
 /*
 	For following controls:
 	'both' - use both Ctrl-Enter and Escape hotkeys 
+	'upgrade' - use Ctrl-Enter with progress ajax indicator and Escape hotkeys. Nonajax request for OK option is performed.
 	'cancel' - apply to 'RESET' button
 */
 function submit_add_or_update($add=true, $title=false, $async=false, $clone=false)
@@ -201,10 +212,13 @@ function submit_add_or_update($add=true, $title=false, $async=false, $clone=fals
 
 	if ($async === 'both') {
 		$async = 'default'; $cancel = 'cancel';
-	} 
-	else if ($async === 'default')
+	}
+	elseif ($async === 'upgrade') {
+		$async = 'default nonajax process'; $cancel = 'cancel';
+	}
+	elseif ($async === 'default')
 		$cancel = true;
-	else if ($async === 'cancel')
+	elseif ($async === 'cancel')
 		$async = true;
 	
 	if ($add)
@@ -274,7 +288,7 @@ function set_icon($icon, $title=false)
 	global $path_to_root;
 	if (basename($icon) === $icon) // standard icons does not contain path separator
 		$icon = "$path_to_root/themes/".user_theme()."/images/$icon";
-	return "<img src='$icon' width='12' height='12' border='0'".($title ? " title='$title'" : "")." >\n";	
+	return "<img src='$icon' style='vertical-align:middle;width:12px;height:12px;border:0;'".($title ? " title='$title'" : "")." >\n";	
 }
 
 function button($name, $value, $title=false, $icon=false,  $aspect='')
@@ -291,7 +305,7 @@ function button($name, $value, $title=false, $icon=false,  $aspect='')
 		if ($value == _("Delete")) // Helper during implementation
 			$icon = ICON_DELETE;
 		return "<button type='submit' class='editbutton' name='"
-			.htmlentities(strtr($name, array('.'=>'=2E', '='=>'=3D',// ' '=>'=20','['=>'=5B'
+			.html_specials_encode(strtr($name, array('.'=>'=2E', '='=>'=3D',// ' '=>'=20','['=>'=5B'
 			)))
 			."' value='1'" . ($title ? " title='$title'":" title='$value'")
 			. ($aspect ? " aspect='$aspect'" : '')
@@ -334,9 +348,7 @@ function select_button_cell($name, $value, $title=false)
 
 function check_value($name)
 {
-	if (!isset($_POST[$name]))
-		return 0;
-	return 1;
+    return (empty($_POST[$name]) ? 0 : 1);
 }
 
 function checkbox($label, $name, $value=null, $submit_on_change=false, $title=false)
@@ -392,7 +404,7 @@ function check_row($label, $name, $value=null, $submit_on_change=false, $title=f
 function radio($label, $name, $value, $selected=null, $submit_on_change=false)
 {
 	if (!isset($selected))
-		$selected = get_post($name) == $value;
+		$selected = get_post($name) === (string)$value;
 
 	if ($submit_on_change === true)
 		$submit_on_change = 
@@ -491,6 +503,16 @@ function label_row($label, $value, $params="", $params2="", $leftfill=0, $id=nul
 	echo "</tr>\n";
 }
 
+function text_input($name, $value=null, $size='', $max='', $title='', $params='')
+{
+	if ($value === null)
+		$value = get_post($name);
+
+	return "<input $params type=\"text\" name=\"$name\" size=\"$size\" maxlength=\"$max\" value=\"$value\""
+	    .($title ? " title='$title'" : '')
+	    .">";
+}
+
 //-----------------------------------------------------------------------------------
 
 function text_cells($label, $name, $value=null, $size="", $max="", $title=false, 
@@ -503,11 +525,7 @@ function text_cells($label, $name, $value=null, $size="", $max="", $title=false,
 		label_cell($label, $labparams);
 	echo "<td>";
 
-	if ($value === null)
-		$value = get_post($name);
-	echo "<input $inparams type=\"text\" name=\"$name\" size=\"$size\" maxlength=\"$max\" value=\"$value\""
-	    .($title ? " title='$title'" : '')
-	    .">";
+	echo text_input($name, $value, $size, $max, $title, $inparams);
 
 	if ($post_label != "")
 		echo " " . $post_label;
@@ -611,7 +629,7 @@ function link_row_ex($label, $name, $size, $max=null, $title=null, $value=null, 
 function date_cells($label, $name, $title = null, $check=null, $inc_days=0, 
 	$inc_months=0, $inc_years=0, $params=null, $submit_on_change=false)
 {
-	global $use_date_picker, $path_to_root, $Ajax;
+	global $path_to_root, $Ajax;
 
 	if (!isset($_POST[$name]) || $_POST[$name] == "")
 	{
@@ -629,7 +647,7 @@ function date_cells($label, $name, $title = null, $check=null, $inc_days=0,
 			$_POST[$name] = $dd;
 		}
 	}
-	if ($use_date_picker)
+	if (user_use_date_picker())
 	{
 		$calc_image = (file_exists("$path_to_root/themes/".user_theme()."/images/cal.gif")) ? 
 			"$path_to_root/themes/".user_theme()."/images/cal.gif" : "$path_to_root/themes/default/images/cal.gif";
@@ -690,19 +708,70 @@ function file_row($label, $name, $id = "")
 	echo "</tr>\n";
 }	
 
-//-----------------------------------------------------------------------------------
+/*-----------------------------------------------------------------------------------
 
-function ref_cells($label, $name, $title=null, $init=null, $params=null, $submit_on_change=false)
+ Reference number input.
+
+ Optional  $context array contains transaction data used in number parsing:
+ 	'data' - data used for month/year codes
+	'location' - location code
+ 	'customer' - debtor_no
+ 	'supplier' - supplier id
+ 	'branch' - branch_code
+*/
+function ref_cells($label, $name, $title=null, $init=null, $params=null, $submit_on_change=false, $type=null, $context=null)
 {
-	text_cells_ex($label, $name, 16, 18, $init, $title, $params, null, $submit_on_change);
+	global $Ajax, $Refs;
+
+	if (isset($type)) {
+		if (empty($_POST[$name.'_list'])) // restore refline id
+			$_POST[$name.'_list'] = $Refs->reflines->find_refline_id(empty($_POST[$name]) ? $init : $_POST[$name], $type);
+
+		if (empty($_POST[$name])) // initialization
+		{
+			if (isset($init))
+			{
+				$_POST[$name] = $init;
+			} else {
+				$_POST[$name] = $Refs->get_next($type, $_POST[$name.'_list'], $context);
+			}
+			$Ajax->addUpdate(true, $name, $_POST[$name]);
+		}
+
+		if (check_ui_refresh($name)) { // call context changed
+			$_POST[$name] = $Refs->normalize($_POST[$name], $type, $context, $_POST[$name.'_list']);
+			$Ajax->addUpdate(true, $name, $_POST[$name]);
+		}
+
+		if ($Refs->reflines->count($type)>1) {
+			if (list_updated($name.'_list')) {
+				$_POST[$name] = $Refs->get_next($type, $_POST[$name.'_list'], $context);
+				$Ajax->addUpdate(true, $name, $_POST[$name]);
+			}
+			$list = refline_list($name.'_list', $type);
+		} else {
+			$list = '';
+		}
+
+		if (isset($label))
+			label_cell($label, $params);
+
+		label_cell($list."<input name='".$name."' "
+			.(check_edit_access($name) ? '' : 'disabled ')
+			."value='".@$_POST[$name]."' size=10 maxlength=35>");
+	}
+	else // just wildcard ref field (e.g. for global inquires)
+	{
+		text_cells_ex($label, $name, 16, 35, $init, $title, $params, null, $submit_on_change);
+	}
 }
 
 //-----------------------------------------------------------------------------------
 
-function ref_row($label, $name, $title=null, $init=null, $submit_on_change=false)
+function ref_row($label, $name, $title=null, $init=null, $submit_on_change=false, $type=null, $context = null)
 {
 	echo "<tr><td class='label'>$label</td>";
-	ref_cells(null, $name, $title, $init, null, $submit_on_change);
+	ref_cells(null, $name, $title, $init, null, $submit_on_change, $type, $context);
 	echo "</tr>\n";
 }
 
@@ -859,26 +928,6 @@ function textarea_row($label, $name, $value, $cols, $rows, $title=null, $params=
 }
 
 //-----------------------------------------------------------------------------------
-/*
-function text_row_with_submit($label, $name, $value, $size, $max, $input_name, $input_value)
-{
-  	global $Ajax;
-
-	default_focus($name);
-	echo "<tr><td>$label</td>\n";
-	echo "<td>";
-
-	if ($value == null)
-		$value = (!isset($_POST[$name]) ? "" : $_POST[$name]);
-	echo "<input type=\"text\" name=\"$name\" size=\"$size\" maxlength=\"$max\" value=\"$value\">   ";
-
-	submit($input_name, $input_value);
-
-	echo "</td></tr>\n";
-	$Ajax->addUpdate($name, $name, $value);
-}
-*/
-//-----------------------------------------------------------------------------------
 //
 //	When show_inactive page option is set 
 //  displays value of inactive field as checkbox cell.
@@ -951,7 +1000,7 @@ function supplier_credit_row($supplier, $credit, $parms='')
 function bank_balance_row($bank_acc, $parms='')
 {
 	global $path_to_root;
-	
+
 	$to = add_days(Today(), 1);
 	$bal = get_balance_before_for_bank_account($bank_acc, $to);
 	label_row( _("Bank Balance:"),
@@ -962,4 +1011,12 @@ function bank_balance_row($bank_acc, $parms='')
 		."</a>", $parms);
 }
 
-?>
+function ahref($label, $href, $target="", $onclick="") {
+  echo "<a href='$href' target='$target' onclick='$onclick'>$label</a>";
+}
+
+function ahref_cell($label, $href, $target="", $onclick="") {
+  echo "<td align='center'>&nbsp;&nbsp;";
+  ahref($label, $href, $target, $onclick);
+  echo "&nbsp;&nbsp;</td>";
+}

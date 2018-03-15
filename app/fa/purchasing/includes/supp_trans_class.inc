@@ -29,10 +29,12 @@ class supp_trans
 	var $tax_included;
 	
 	var $trans_type;	// invoice or credit
+	var $trans_no;
 
 	var $Comments;
 	var $tran_date;
 	var $due_date;
+	var $src_docs = array();		// source invoice for this credit note (if any)
 
 	var $supp_reference;
 	var $reference;
@@ -41,14 +43,33 @@ class supp_trans
 	var $ov_gst;
 	var $gl_codes_counter=0;
 	var $credit = 0;
+	var $currency;
 	var $tax_overrides = array();		// array of taxes manually inserted during sales invoice entry
 
-	function supp_trans($trans_type)
+	var $dimension,
+		$dimension2;
+
+	function __construct($trans_type, $trans_no=0)
 	{
 		$this->trans_type = $trans_type;
 		/*Constructor function initialises a new Supplier Transaction object */
-		$this->grn_items = array();
-		$this->gl_codes = array();
+		$this->read($trans_type, $trans_no);
+	}
+
+	function read($trans_type, $trans_no)
+	{
+		$this->trans_type = $trans_type;
+		$this->trans_no = $trans_no;
+ 		$this->grn_items = array();
+ 		$this->gl_codes = array();
+		if ($trans_no) {
+			read_supp_invoice($trans_no, $trans_type, $this);
+			if ($trans_type == ST_SUPPCREDIT)
+			{
+				$this->src_docs = find_src_invoices($trans_no);
+			}
+			read_supplier_details_to_trans($this, $this->supplier_id);
+		}
 	}
 
 	function add_grn_to_trans($grn_item_id, $po_detail_item, $item_code, $item_description, 
@@ -58,6 +79,9 @@ class supp_trans
 		$this->grn_items[$grn_item_id] = new grn_item($grn_item_id, $po_detail_item, 
 			$item_code, $item_description, $qty_recd, $prev_quantity_inv, $this_quantity_inv, 
 			$order_price, $chg_price, $std_cost_unit, $gl_code, $this->tax_included);
+
+		$this->src_docs = find_src_invoices($this);
+
 		unset($this->tax_overrides); // cancel tax overrides after cart change
 		return 1;
 	}
@@ -168,7 +192,9 @@ class supp_trans
    		}
    		return $total;
     }
-
+	//
+	//	Returns transaction total 
+	//
 	function get_items_total()
 	{
 		$total = 0;
@@ -204,7 +230,7 @@ all the info to do the necessary entries without looking up ie additional querie
 	var $gl_code;
 	var $tax_included;
 
-	function grn_item ($id, $po_detail_item, $item_code, $item_description, $qty_recd, 
+	function __construct($id, $po_detail_item, $item_code, $item_description, $qty_recd, 
 		$prev_quantity_inv, $this_quantity_inv, $order_price, $chg_price,
 		$std_cost_unit, $gl_code, $tax_included)
 	{
@@ -248,7 +274,7 @@ class gl_codes
 	var $amount;
 	var $memo_;
 
-	function gl_codes ($Counter, $gl_code, $gl_act_name, $gl_dim, $gl_dim2, $amount, $memo_)
+	function __construct($Counter, $gl_code, $gl_act_name, $gl_dim, $gl_dim2, $amount, $memo_)
 	{
 
 	/* Constructor function to add a new gl_codes object with passed params */
@@ -262,4 +288,3 @@ class gl_codes
 	}
 }
 
-?>

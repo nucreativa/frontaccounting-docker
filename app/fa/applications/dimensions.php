@@ -11,10 +11,10 @@
 ***********************************************************************/
 class dimensions_app extends application
 {
-	function dimensions_app()
+	function __construct()
 	{
 		$dim = get_company_pref('use_dimension');
-		$this->application("proj", _($this->help_context = "&Dimensions"), $dim);
+		parent::__construct("proj", _($this->help_context = "&Dimensions"), $dim);
 
 		if ($dim > 0)
 		{
@@ -40,4 +40,3 @@ class dimensions_app extends application
 	}
 }
 
-?>

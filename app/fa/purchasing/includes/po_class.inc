@@ -34,11 +34,20 @@ class purch_order
 	var $tax_included; // type of prices
 	var $terms;
 	var $ex_rate;
+	var $cash_account;
+	var $dimension,
+		$dimension2;
 
 	var $reference;
 	var $tax_overrides = array();		// array of taxes manually inserted during sales invoice entry (direct invoice)
 	
-	function purch_order()
+	var $prep_amount = 0; // prepayment required
+	var $alloc; // sum of payments allocated
+	var $prepayments = array();
+
+	var $fixed_asset = false;
+
+	function __construct()
 	{
 		/*Constructor function initialises a new purchase order object */
 		$this->line_items = array();
@@ -207,7 +216,7 @@ class po_line_details
 	var $standard_cost;
 	var $descr_editable;
 
-	function po_line_details($line_no, $stock_item, $item_descr, $qty, $prc, $uom, $req_del_date, 
+	function __construct($line_no, $stock_item, $item_descr, $qty, $prc, $uom, $req_del_date, 
 		$qty_inv, $qty_recd, $grn_item_id=0)
 	{
 
@@ -236,11 +245,11 @@ class po_line_details
 		$this->standard_cost =0;
 		$this->grn_item_id = $grn_item_id;
 	}
-
+	
 	// Deprecated, use with care. If you need line value as it is calculated in invoice, use taxfree_charge_value below.
-	function taxfree_charge_price($po)
+ 	function taxfree_charge_price($po)
 	{
-		return get_tax_free_price_for_item($this->stock_id, $this->price,
+		return get_tax_free_price_for_item($this->stock_id, $this->price, 
 		  $po->tax_group_id, $po->tax_included, $po->tax_group_array);
 	}
 
@@ -254,4 +263,3 @@ class po_line_details
 	}
 }
 
-?>

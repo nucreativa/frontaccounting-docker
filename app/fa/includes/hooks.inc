@@ -116,6 +116,7 @@ class hooks {
 	function price_in_words($amount, $doc_type)
 	{
 	}
+
 	//
 	// Exchange rate currency $curr as on date $date.
 	// Keep in mind FA has internally implemented 3 exrate providers
@@ -202,15 +203,14 @@ class hooks {
 	 * more than one in  the cart.
 	 */
 	/* Default behavior check if there is enough quantity on hand and change the css
- * class if needed */
+ 	 * class if needed */
 	static function  default_get_dispatchable_quantity($line_item, $location, $date, $qoh) {
-    global $SysPrefs;
+    	global $SysPrefs;
 
 		if ($SysPrefs->allow_negative_stock() || ($line_item->qty_dispatched <= $qoh)) {
 			return true;
 		}
 		return array($qoh, 'stockmankobg');
-		return array($line_item->qty_dispatched, 'stockmankobg');
 	}
 
 }
@@ -235,11 +235,13 @@ function install_hooks()
 		unset($code, $hook_class);
 	}
 	// install hooks provided by active extensions
-	foreach($installed_extensions as $ext) {
+	if (isset($installed_extensions) && !empty($installed_extensions)) {
+		foreach($installed_extensions as $ext) {
 			$hook_class = 'hooks_'.$ext['package'];
 			if ($ext['active'] && class_exists($hook_class)) {
 				$Hooks[$ext['package']] = new $hook_class;
 			}
+		}	
 	}
 }
 /*
@@ -249,7 +251,7 @@ function install_hooks()
 function activate_hooks($ext, $comp, $on=true)
 {
 	global $Hooks;
-	
+
 	$hooks = @$Hooks[$ext];
 	if (!$hooks) {
 		$hookclass = 'hooks_'.$ext;
@@ -314,7 +316,7 @@ function hook_invoke_first($method, &$data, $opts=null)
 {
 
 	global $Hooks;
-	
+
 	$result = null;
 	foreach($Hooks as $ext => $hook) {
 		if (method_exists($hook, $method)) {

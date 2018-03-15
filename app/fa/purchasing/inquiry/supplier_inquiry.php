@@ -17,49 +17,23 @@ include_once($path_to_root . "/includes/session.inc");
 include_once($path_to_root . "/purchasing/includes/purchasing_ui.inc");
 include_once($path_to_root . "/reporting/includes/reporting.inc");
 
-if (!@$_GET['popup'])
-{
-	$js = "";
-	if ($use_popup_windows)
-		$js .= get_js_open_window(900, 500);
-	if ($use_date_picker)
-		$js .= get_js_date_picker();
-	page(_($help_context = "Supplier Inquiry"), isset($_GET['supplier_id']), false, "", $js);
-}
+$js = "";
+if ($SysPrefs->use_popup_windows)
+	$js .= get_js_open_window(900, 500);
+if (user_use_date_picker())
+	$js .= get_js_date_picker();
+page(_($help_context = "Supplier Inquiry"), isset($_GET['supplier_id']), false, "", $js);
+
 if (isset($_GET['supplier_id'])){
 	$_POST['supplier_id'] = $_GET['supplier_id'];
 }
+
 if (isset($_GET['FromDate'])){
 	$_POST['TransAfterDate'] = $_GET['FromDate'];
 }
 if (isset($_GET['ToDate'])){
 	$_POST['TransToDate'] = $_GET['ToDate'];
 }
-
-//------------------------------------------------------------------------------------------------
-
-if (!@$_GET['popup'])
-	start_form();
-
-if (!isset($_POST['supplier_id']))
-	$_POST['supplier_id'] = get_global_supplier();
-
-start_table(TABLESTYLE_NOBORDER);
-start_row();
-
-if (!@$_GET['popup'])
-	supplier_list_cells(_("Select a supplier:"), 'supplier_id', null, true, false, false, !@$_GET['popup']);
-
-date_cells(_("From:"), 'TransAfterDate', '', null, -30);
-date_cells(_("To:"), 'TransToDate');
-
-supp_transactions_list_cell("filterType", null, true);
-
-submit_cells('RefreshInquiry', _("Search"),'',_('Refresh Inquiry'), 'default');
-
-end_row();
-end_table();
-set_global_supplier($_POST['supplier_id']);
 
 //------------------------------------------------------------------------------------------------
 
@@ -89,21 +63,6 @@ function display_supplier_summary($supplier_record)
     end_table(1);
 }
 //------------------------------------------------------------------------------------------------
-
-div_start('totals_tbl');
-if (($_POST['supplier_id'] != "") && ($_POST['supplier_id'] != ALL_TEXT))
-{
-	$supplier_record = get_supplier_details($_POST['supplier_id'], $_POST['TransToDate']);
-    display_supplier_summary($supplier_record);
-}
-div_end();
-
-if(get_post('RefreshInquiry'))
-{
-	$Ajax->activate('totals_tbl');
-}
-
-//------------------------------------------------------------------------------------------------
 function systype_name($dummy, $type)
 {
 	global $systypes_array;
@@ -127,7 +86,9 @@ function gl_view($row)
 
 function credit_link($row)
 {
-	if (@$_GET['popup'])
+	global $page_nested;
+
+	if ($page_nested)
 		return '';
 	return $row['type'] == ST_SUPPINVOICE && $row["TotalAmount"] - $row["Allocated"] > 0 ?
 		pager_link(_("Credit This"),
@@ -136,17 +97,10 @@ function credit_link($row)
 			: '';
 }
 
-function fmt_debit($row)
+function fmt_amount($row)
 {
 	$value = $row["TotalAmount"];
-	return $value>0 ? price_format($value) : '';
-
-}
-
-function fmt_credit($row)
-{
-	$value = -$row["TotalAmount"];
-	return $value>0 ? price_format($value) : '';
+	return price_format($value);
 }
 
 function prt_link($row)
@@ -160,24 +114,76 @@ function check_overdue($row)
 	return $row['OverDue'] == 1
 		&& (abs($row["TotalAmount"]) - $row["Allocated"] != 0);
 }
+
+function edit_link($row)
+{
+	global $page_nested;
+
+	if ($page_nested)
+		return '';
+	return trans_editor_link($row['type'], $row['trans_no']);
+}
 //------------------------------------------------------------------------------------------------
 
-$sql = get_sql_for_supplier_inquiry($_POST['filterType'], $_POST['TransAfterDate'], $_POST['TransToDate'], $_POST['supplier_id']);
+start_form();
+
+if (!isset($_POST['supplier_id']))
+	$_POST['supplier_id'] = get_global_supplier();
+
+start_table(TABLESTYLE_NOBORDER);
+start_row();
+
+if (!$page_nested)
+	supplier_list_cells(_("Select a supplier:"), 'supplier_id', null, true, true, false, true);
+
+supp_transactions_list_cell("filterType", null, true);
+
+if ($_POST['filterType'] != '2')
+{
+	date_cells(_("From:"), 'TransAfterDate', '', null, -user_transaction_days());
+	date_cells(_("To:"), 'TransToDate');
+}
+
+submit_cells('RefreshInquiry', _("Search"),'',_('Refresh Inquiry'), 'default');
+
+end_row();
+end_table();
+set_global_supplier($_POST['supplier_id']);
+
+//------------------------------------------------------------------------------------------------
+
+div_start('totals_tbl');
+if ($_POST['supplier_id'] != "" && $_POST['supplier_id'] != ALL_TEXT)
+{
+	$supplier_record = get_supplier_details(get_post('supplier_id'), get_post('TransToDate'));
+    display_supplier_summary($supplier_record);
+}
+div_end();
+
+if (get_post('RefreshInquiry') || list_updated('filterType'))
+{
+	$Ajax->activate('_page_body');
+}
+
+//------------------------------------------------------------------------------------------------
+
+$sql = get_sql_for_supplier_inquiry(get_post('filterType'), get_post('TransAfterDate'), get_post('TransToDate'), get_post('supplier_id'));
 
 $cols = array(
 			_("Type") => array('fun'=>'systype_name', 'ord'=>''), 
-			_("#") => array('fun'=>'trans_view', 'ord'=>''), 
+			_("#") => array('fun'=>'trans_view', 'ord'=>'', 'align'=>'right'), 
 			_("Reference"), 
 			_("Supplier"),
 			_("Supplier's Reference"), 
 			_("Date") => array('name'=>'tran_date', 'type'=>'date', 'ord'=>'desc'), 
 			_("Due Date") => array('type'=>'date', 'fun'=>'due_date'), 
 			_("Currency") => array('align'=>'center'),
-			_("Debit") => array('align'=>'right', 'fun'=>'fmt_debit'), 
-			_("Credit") => array('align'=>'right', 'insert'=>true,'fun'=>'fmt_credit'), 
+			_("Amount") => array('align'=>'right', 'fun'=>'fmt_amount'), 
+			_("Balance") => array('align'=>'right', 'type'=>'amount'),
 			array('insert'=>true, 'fun'=>'gl_view'),
 			array('insert'=>true, 'fun'=>'credit_link'),
-			array('insert'=>true, 'fun'=>'prt_link')
+			array('insert'=>true, 'fun'=>'prt_link'),
+			array('insert'=>true, 'fun'=>'edit_link')
 			);
 
 if ($_POST['supplier_id'] != ALL_TEXT)
@@ -185,8 +191,8 @@ if ($_POST['supplier_id'] != ALL_TEXT)
 	$cols[_("Supplier")] = 'skip';
 	$cols[_("Currency")] = 'skip';
 }
-//------------------------------------------------------------------------------------------------
-
+if ($_POST['filterType'] != '2')
+	$cols[_("Balance")] = 'skip';
 
 /*show a table of the transactions returned by the sql */
 $table =& new_db_pager('trans_tbl', $sql, $cols);
@@ -196,9 +202,6 @@ $table->width = "85%";
 
 display_db_pager($table);
 
-if (!@$_GET['popup'])
-{
-	end_form();
-	end_page(@$_GET['popup'], false, false);
-}
-?>
+end_form();
+end_page();
+

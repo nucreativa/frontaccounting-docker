@@ -12,8 +12,12 @@
 $page_security = 'SA_GLACCOUNT';
 $path_to_root = "../..";
 include($path_to_root . "/includes/session.inc");
- 
-page(_($help_context = "Chart of Accounts"));
+
+$js = "";
+if ($SysPrefs->use_popup_windows && $SysPrefs->use_popup_search)
+	$js .= get_js_open_window(900, 500);
+
+page(_($help_context = "Chart of Accounts"), false, false, "", $js);
 
 include($path_to_root . "/includes/ui.inc");
 include($path_to_root . "/gl/includes/gl_db.inc");
@@ -21,6 +25,9 @@ include($path_to_root . "/admin/db/tags_db.inc");
 include_once($path_to_root . "/includes/data_checks.inc");
 
 check_db_has_gl_account_groups(_("There are no account groups defined. Please define at least one account group before entering accounts."));
+
+if (isset($_GET["id"]))
+	$_POST["id"] = $_GET["id"];	
 
 //-------------------------------------------------------------------------------------
 
@@ -58,8 +65,8 @@ if (isset($_POST['add']) || isset($_POST['update']))
 		$input_error = 1;
 		display_error( _("The account name cannot be empty."));
 		set_focus('account_name');
-	}  
-	elseif (!$accounts_alpha && !preg_match("/^[0-9.]+$/",$_POST['account_code'])) // we only allow 0-9 and a dot
+	} 
+	elseif (!$SysPrefs->accounts_alpha() && !preg_match("/^[0-9.]+$/",$_POST['account_code'])) // we only allow 0-9 and a dot
 	{
 	    $input_error = 1;
 	    display_error( _("The account code must be numeric."));
@@ -67,7 +74,7 @@ if (isset($_POST['add']) || isset($_POST['update']))
 	}
 	if ($input_error != 1)
 	{
-		if ($accounts_alpha == 2)
+		if ($SysPrefs->accounts_alpha() == 2)
 			$_POST['account_code'] = strtoupper($_POST['account_code']);
 
 		if (!isset($_POST['account_tags']))
@@ -78,7 +85,7 @@ if (isset($_POST['add']) || isset($_POST['update']))
 			if (get_post('inactive') == 1 && is_bank_account($_POST['account_code']))
 			{
 				display_error(_("The account belongs to a bank account and cannot be inactivated."));
-			}	
+			}
     		elseif (update_gl_account($_POST['account_code'], $_POST['account_name'], 
 				$_POST['account_type'], $_POST['account_code2'])) {
 				update_record_status($_POST['account_code'], $_POST['inactive'],
@@ -128,32 +135,31 @@ function can_delete($selected_account)
 	{
 		display_error(_("Cannot delete this account because it is used by a bank account."));
 		return false;
-	}	
+	}
 
 	if (gl_account_in_stock_category($selected_account))
 	{
 		display_error(_("Cannot delete this account because it is used by one or more Item Categories."));
 		return false;
-	}	
-	
+	}
+
 	if (gl_account_in_stock_master($selected_account))
 	{
 		display_error(_("Cannot delete this account because it is used by one or more Items."));
 		return false;
-	}	
-	
+	}
+
 	if (gl_account_in_tax_types($selected_account))
 	{
 		display_error(_("Cannot delete this account because it is used by one or more Taxes."));
 		return false;
-	}	
-	
+	}
+
 	if (gl_account_in_cust_branch($selected_account))
 	{
 		display_error(_("Cannot delete this account because it is used by one or more Customer Branches."));
 		return false;
-	}		
-	
+	}
 	if (gl_account_in_suppliers($selected_account))
 	{
 		display_error(_("Cannot delete this account because it is used by one or more suppliers."));
@@ -187,6 +193,7 @@ if (isset($_POST['delete']))
 } 
 
 //-------------------------------------------------------------------------------------
+$filter_id = (isset($_POST["id"]));
 
 start_form();
 
@@ -194,8 +201,10 @@ if (db_has_gl_accounts())
 {
 	start_table(TABLESTYLE_NOBORDER);
 	start_row();
-    gl_all_accounts_list_cells(null, 'AccountList', null, false, false,
-		_('New account'), true, check_value('show_inactive'));
+	if ($filter_id)
+		gl_all_accounts_list_cells(null, 'AccountList', null, false, false, _('New account'), true, check_value('show_inactive'), $_POST['id']);
+	else
+		gl_all_accounts_list_cells(null, 'AccountList', null, false, false, _('New account'), true, check_value('show_inactive'));
 	check_cells(_("Show inactive:"), 'show_inactive', null, true);
 	end_row();
 	end_table();
@@ -237,6 +246,7 @@ else
 		$_POST['account_code'] = $_POST['account_code2'] = '';
 		$_POST['account_name']	= $_POST['account_type'] = '';
  		$_POST['inactive'] = 0;
+		if ($filter_id) $_POST['account_type'] = $_POST['id'];
 	}
 	text_row_ex(_("Account Code:"), 'account_code', 15);
 }
@@ -265,4 +275,3 @@ end_form();
 
 end_page();
 
-?>

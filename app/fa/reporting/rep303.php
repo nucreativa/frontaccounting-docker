@@ -31,38 +31,37 @@ print_stock_check();
 
 function getTransactions($category, $location, $item_like)
 {
-	$sql = "SELECT ".TB_PREF."stock_master.category_id,
-			".TB_PREF."stock_category.description AS cat_description,
-			".TB_PREF."stock_master.stock_id,
-			".TB_PREF."stock_master.units,
-			".TB_PREF."stock_master.description, ".TB_PREF."stock_master.inactive,
-			IF(".TB_PREF."stock_moves.stock_id IS NULL, '', ".TB_PREF."stock_moves.loc_code) AS loc_code,
-			SUM(IF(".TB_PREF."stock_moves.stock_id IS NULL,0,".TB_PREF."stock_moves.qty)) AS QtyOnHand
-		FROM (".TB_PREF."stock_master,
-			".TB_PREF."stock_category)
-		LEFT JOIN ".TB_PREF."stock_moves ON
-			(".TB_PREF."stock_master.stock_id=".TB_PREF."stock_moves.stock_id)
-		WHERE ".TB_PREF."stock_master.category_id=".TB_PREF."stock_category.category_id
-		AND (".TB_PREF."stock_master.mb_flag='B' OR ".TB_PREF."stock_master.mb_flag='M')";
+	$sql = "SELECT item.category_id,
+			category.description AS cat_description,
+			item.stock_id, item.units,
+			item.description, item.inactive,
+			IF(move.stock_id IS NULL, '', move.loc_code) AS loc_code,
+			SUM(IF(move.stock_id IS NULL,0,move.qty)) AS QtyOnHand
+		FROM ("
+			.TB_PREF."stock_master item,"
+			.TB_PREF."stock_category category)
+			LEFT JOIN ".TB_PREF."stock_moves move ON item.stock_id=move.stock_id
+		WHERE item.category_id=category.category_id
+		AND (item.mb_flag='B' OR item.mb_flag='M')";
 	if ($category != 0)
-		$sql .= " AND ".TB_PREF."stock_master.category_id = ".db_escape($category);
+		$sql .= " AND item.category_id = ".db_escape($category);
 	if ($location != 'all')
-		$sql .= " AND IF(".TB_PREF."stock_moves.stock_id IS NULL, '1=1',".TB_PREF."stock_moves.loc_code = ".db_escape($location).")";
+		$sql .= " AND IF(move.stock_id IS NULL, '1=1',move.loc_code = ".db_escape($location).")";
   if($item_like)
   {
     $regexp = null;
 
     if(sscanf($item_like, "/%s", $regexp)==1)
-      $sql .= " AND ".TB_PREF."stock_master.stock_id RLIKE ".db_escape($regexp);
+      $sql .= " AND item.stock_id RLIKE ".db_escape($regexp);
     else
-      $sql .= " AND ".TB_PREF."stock_master.stock_id LIKE ".db_escape($item_like);
+      $sql .= " AND item.stock_id LIKE ".db_escape($item_like);
   }
-	$sql .= " GROUP BY ".TB_PREF."stock_master.category_id,
-		".TB_PREF."stock_category.description,
-		".TB_PREF."stock_master.stock_id,
-		".TB_PREF."stock_master.description
-		ORDER BY ".TB_PREF."stock_master.category_id,
-		".TB_PREF."stock_master.stock_id";
+	$sql .= " GROUP BY item.category_id,
+		category.description,
+		item.stock_id,
+		item.description
+		ORDER BY item.category_id,
+		item.stock_id";
 
     return db_query($sql,"No transactions were returned");
 }
@@ -71,16 +70,16 @@ function getTransactions($category, $location, $item_like)
 
 function print_stock_check()
 {
-    global $path_to_root, $pic_height;
+    global $path_to_root, $SysPrefs;
 
-    	$category = $_POST['PARAM_0'];
-    	$location = $_POST['PARAM_1'];
-    	$pictures = $_POST['PARAM_2'];
-    	$check    = $_POST['PARAM_3'];
-    	$shortage = $_POST['PARAM_4'];
-    	$no_zeros = $_POST['PARAM_5'];
-    	$like     = $_POST['PARAM_6']; 
-    	$comments = $_POST['PARAM_7'];
+   	$category = $_POST['PARAM_0'];
+   	$location = $_POST['PARAM_1'];
+   	$pictures = $_POST['PARAM_2'];
+   	$check    = $_POST['PARAM_3'];
+   	$shortage = $_POST['PARAM_4'];
+   	$no_zeros = $_POST['PARAM_5'];
+   	$like     = $_POST['PARAM_6']; 
+   	$comments = $_POST['PARAM_7'];
 	$orientation = $_POST['PARAM_8'];
 	$destination = $_POST['PARAM_9'];
 
@@ -113,6 +112,7 @@ function print_stock_check()
 		$short = _('No');
 		$available = _('Available');
 	}
+	$barcodes = !empty($SysPrefs->prefs['barcodes_on_stock']);
 	if ($no_zeros) $nozeros = _('Yes');
 	else $nozeros = _('No');
 	if ($check)
@@ -128,17 +128,33 @@ function print_stock_check()
 		$aligns = array('left',	'left',	'left', 'right', 'right', 'right', 'right');
 	}
 
+    $params =   array(
+		0 => $comments,
+    	1 => array('text' => _('Category'), 'from' => $cat, 'to' => ''),
+    	2 => array('text' => _('Location'), 'from' => $loc, 'to' => ''),
+    	3 => array('text' => _('Only Shortage'), 'from' => $short, 'to' => ''),
+		4 => array('text' => _('Suppress Zeros'), 'from' => $nozeros, 'to' => '')
+	);
 
-    	$params =   array( 	0 => $comments,
-    				1 => array('text' => _('Category'), 'from' => $cat, 'to' => ''),
-    				2 => array('text' => _('Location'), 'from' => $loc, 'to' => ''),
-    				3 => array('text' => _('Only Shortage'), 'from' => $short, 'to' => ''),
-				4 => array('text' => _('Suppress Zeros'), 'from' => $nozeros, 'to' => ''));
-
-	if ($pictures)
-		$user_comp = user_company();
-	else
-		$user_comp = "";
+	if ($barcodes)
+	{
+    	// define barcode style
+    	$style = array(
+    		'position' => 'L', // If blank string, barcode starts on left edge of page
+    		'stretch' => false,
+    		'fitwidth' => true,
+    		'cellfitalign' => '',
+    		'border' => false,
+    		'padding' => 3,
+    		'fgcolor' => array(0,0,0),
+    		'bgcolor' => false, //array(255,255,255),
+    		'text' => true,
+    		'font' => 'helvetica',
+    		'fontsize' => 8,
+    		'stretchtext' => 4
+    	);
+    	// write1DBarcode($code, $type, $x='', $y='', $w='', $h='', $xres=0.4, $style='', $align='')
+    }	
 
    	$rep = new FrontReport(_('Stock Check Sheets'), "StockCheckSheet", user_pagesize(), 9, $orientation);
     if ($orientation == 'L')
@@ -197,19 +213,29 @@ function print_stock_check()
 			$rep->AmountCol(5, 6, $trans['QtyOnHand'] - $demandqty, $dec);
 			$rep->AmountCol(6, 7, $onorder, $dec);
 		}
-		if ($pictures)
+		if ($pictures || $barcodes)
 		{
-			$image = company_path() . '/images/'
-				. item_img_name($trans['stock_id']) . '.jpg';
-			if (file_exists($image))
+			$rep->NewLine();
+			if ($rep->row - $SysPrefs->pic_height < $rep->bottomMargin)
+				$rep->NewPage();
+			$firstcol = 1;	
+			if ($barcodes)
 			{
-				$rep->NewLine();
-				if ($rep->row - $pic_height < $rep->bottomMargin)
-					$rep->NewPage();
-				$rep->AddImage($image, $rep->cols[1], $rep->row - $pic_height, 0, $pic_height);
-				$rep->row -= $pic_height;
-				$rep->NewLine();
-			}
+				$bar_y = $rep->GetY();
+				$barcode = str_pad($trans['stock_id'], 7, '0', STR_PAD_LEFT);
+				$barcode = substr($barcode, 0, 8); // EAN 8 Check digit is auto computed and barcode printed
+				$rep->write1DBarcode($barcode, 'EAN8', $rep->cols[$firstcol++], $bar_y + 22, 22, $SysPrefs->pic_height, 1.2, $style, 'N');
+			}	
+			if ($pictures)
+			{
+				$image = company_path() . '/images/' . item_img_name($trans['stock_id']) . '.jpg';
+				if (file_exists($image))
+				{
+					$rep->AddImage($image, $rep->cols[$firstcol], $rep->row - $SysPrefs->pic_height, 0, $SysPrefs->pic_height);
+				}
+			}	
+			$rep->row -= $SysPrefs->pic_height;
+			$rep->NewLine();
 		}
 	}
 	$rep->Line($rep->row - 4);
@@ -217,4 +243,3 @@ function print_stock_check()
     $rep->End();
 }
 
-?>

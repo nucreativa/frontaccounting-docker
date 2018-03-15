@@ -36,7 +36,7 @@ if ($Mode=='ADD_ITEM' || $Mode=='UPDATE_ITEM')
 	if ($Mode=='ADD_ITEM' && (gl_account_in_bank_accounts(get_post('account_code')) 
 			|| key_in_foreign_table(get_post('account_code'), 'gl_trans', 'account'))) {
 		$input_error = 1;
-		display_error(_("The GL account selected is already in use. Select another GL account."));
+		display_error(_("The GL account selected is already in use or has transactions. Select another empty GL account."));
 		set_focus('account_code');
 	}
 	if ($input_error != 1)
@@ -48,7 +48,7 @@ if ($Mode=='ADD_ITEM' || $Mode=='UPDATE_ITEM')
 				$_POST['account_type'], $_POST['bank_account_name'], 
 				$_POST['bank_name'], $_POST['bank_account_number'], 
     			$_POST['bank_address'], $_POST['BankAccountCurrency'],
-    			$_POST['dflt_curr_act']);
+    			$_POST['dflt_curr_act'], $_POST['bank_charge_act']);
 			display_notification(_('Bank account has been updated'));
     	} 
     	else 
@@ -57,7 +57,7 @@ if ($Mode=='ADD_ITEM' || $Mode=='UPDATE_ITEM')
     		add_bank_account($_POST['account_code'], $_POST['account_type'], 
 				$_POST['bank_account_name'], $_POST['bank_name'], 
     			$_POST['bank_account_number'], $_POST['bank_address'], 
-				$_POST['BankAccountCurrency'], $_POST['dflt_curr_act']);
+				$_POST['BankAccountCurrency'], $_POST['dflt_curr_act'], $_POST['bank_charge_act']);
 			display_notification(_('New bank account has been added'));
     	}
  		$Mode = 'RESET';
@@ -94,7 +94,10 @@ if ($Mode == 'RESET')
  	$selected_id = -1;
 	$_POST['bank_name']  = 	$_POST['bank_account_name']  = '';
 	$_POST['bank_account_number'] = $_POST['bank_address'] = '';
+	$_POST['bank_charge_act'] = get_company_pref('bank_charge_act');
 }
+if (!isset($_POST['bank_charge_act']))
+	$_POST['bank_charge_act'] = get_company_pref('bank_charge_act');
 
 /* Always show the list of accounts */
 
@@ -152,11 +155,9 @@ if ($selected_id != -1)
 	$_POST['bank_address'] = $myrow["bank_address"];
 	$_POST['BankAccountCurrency'] = $myrow["bank_curr_code"];
 	$_POST['dflt_curr_act'] = $myrow["dflt_curr_act"];
+	$_POST['bank_charge_act'] = $myrow["bank_charge_act"];
   }
 	hidden('selected_id', $selected_id);
-	hidden('account_code');
-	hidden('account_type');
-	hidden('BankAccountCurrency', $_POST['BankAccountCurrency']);	
 	set_focus('bank_account_name');
 } 
 
@@ -165,6 +166,7 @@ text_row(_("Bank Account Name:"), 'bank_account_name', null, 50, 100);
 if ($is_used) 
 {
 	label_row(_("Account Type:"), $bank_account_types[$_POST['account_type']]);
+	hidden('account_type');
 } 
 else 
 {
@@ -173,6 +175,7 @@ else
 if ($is_used) 
 {
 	label_row(_("Bank Account Currency:"), $_POST['BankAccountCurrency']);
+	hidden('BankAccountCurrency', $_POST['BankAccountCurrency']);
 } 
 else 
 {
@@ -182,10 +185,13 @@ else
 yesno_list_row(_("Default currency account:"), 'dflt_curr_act');
 
 if($is_used)
+{
 	label_row(_("Bank Account GL Code:"), $_POST['account_code']);
-else 
+	hidden('account_code');
+} else 
 	gl_all_accounts_list_row(_("Bank Account GL Code:"), 'account_code', null);
 
+gl_all_accounts_list_row(_("Bank Charges Account:"), 'bank_charge_act', null, true);
 text_row(_("Bank Name:"), 'bank_name', null, 50, 60);
 text_row(_("Bank Account Number:"), 'bank_account_number', null, 30, 60);
 textarea_row(_("Bank Address:"), 'bank_address', null, 40, 5);
@@ -197,4 +203,3 @@ submit_add_or_update_center($selected_id == -1, '', 'both');
 end_form();
 
 end_page();
-?>
